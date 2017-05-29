@@ -12,6 +12,10 @@ This project exposes a web interface to execute on demand data mining algorithms
 
 It relies on a runtime environment containing [Mesos](http://mesos.apache.org) and [Chronos])(https://mesos.github.io/chronos/) to control and execute the Docker containers over a cluster.
 
+## Prerequisite
+
+Woken requires [Captain](https://github.com/harbur/captain) and [docker-compose](https://docs.docker.com/compose/) to be built and executed.
+
 ## Getting started
 
 Follow these steps to get started:
@@ -35,7 +39,7 @@ Follow these steps to get started:
 
 5. Browse to [http://localhost:8087](http://localhost:8087/) or run one of the query* script located in folder 'dev-tests'.
 
-dev-tests/run.sh uses docker-compose to start a full environment with Mesos, Zookeeper and Chronos, all of those are required for the proper execution of woker.
+dev-tests/run.sh uses docker-compose to start a full environment with Mesos, Zookeeper and Chronos, all of those are required for the proper execution of Woken.
 
 ## Available Docker containers
 
