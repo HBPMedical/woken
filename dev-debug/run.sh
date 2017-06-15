@@ -38,7 +38,7 @@ else
   DOCKER_COMPOSE="sudo docker-compose"
 fi
 
-trap '$DOCKER_COMPOSE rm -f ' SIGINT SIGQUIT
+trap '$DOCKER_COMPOSE rm -f' SIGINT SIGQUIT
 
 export HOST="localhost"
 $DOCKER_COMPOSE up

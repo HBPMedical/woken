@@ -146,6 +146,13 @@ object MiningService {
                 "disable": true
             },
             {
+                "code": "tpot",
+                "label": "TPOT",
+                "type": ["predictive_model"],
+                "environment": "hbpmip/python-mip-interactive-statefull-run:latest",
+                "disable": true
+            },
+            {
                 "code": "ffneuralnet",
                 "label": "Feedforward Neural Network",
                 "type": ["predictive_model"],
