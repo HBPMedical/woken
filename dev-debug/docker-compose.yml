@@ -54,18 +54,42 @@ chronos:
     - "4400:4400"
 
 # Expose the database to the host, including the Docker container running the algorithms
-analyticsdb:
-  image: postgres:9.4.5
-  net: host
-  volumes:
-    - ./analytics-db/sql:/docker-entrypoint-initdb.d/
+woken_db:
+  image: "postgres:9.6.2-alpine"
+  container_name: "woken-db"
+  net: bridge
+  ports:
+    - "65434:5432"
+  restart: unless-stopped
   environment:
-    POSTGRES_PASSWORD: test
+    - POSTGRES_USER=woken
+    - POSTGRES_PASSWORD=woken
+
+wait_dbs:
+  image: "waisbrot/wait"
+  links:
+    - "woken_db:woken_db"
+  environment:
+    - TARGETS=woken_db:5432
+
+# Use the latest image built as this is what is under test
+woken_db_setup:
+  image: "hbpmip/woken-db-setup:latest"
+  container_name: "woken-db-setup"
+  environment:
+    - FLYWAY_DBMS=postgresql
+    - FLYWAY_HOST=db
+    - FLYWAY_PORT=5432
+    - FLYWAY_DATABASE_NAME=woken
+    - FLYWAY_USER=woken
+    - FLYWAY_PASSWORD=woken
+  links:
+   - "woken_db:db"
 
 # Expose the database to the host, including the Docker container running the algorithms
 sciencedb:
   image: postgres:9.4.5
-  net: host
+  net: bridge
   ports:
     - "65432:5432"
   volumes:
@@ -76,7 +100,7 @@ sciencedb:
 # Expose the database to the host
 metadb:
   image: postgres:9.4.5
-  net: host
+  net: bridge
   ports:
     - "65433:5432"
   volumes:

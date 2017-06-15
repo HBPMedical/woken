@@ -30,8 +30,6 @@ fi
 
 echo "Starting the Mesos environment and the woken application..."
 
-cp $ROOT_DIR/../target/scala-2.11/woken.jar woken/lib/woken.jar
-
 if groups $USER | grep &>/dev/null '\bdocker\b'; then
   DOCKER_COMPOSE="docker-compose"
 else
@@ -41,4 +39,11 @@ fi
 trap '$DOCKER_COMPOSE rm -f' SIGINT SIGQUIT
 
 export HOST="localhost"
-$DOCKER_COMPOSE up
+
+echo "Deploy a Postgres instance and wait for it to be ready..."
+$DOCKER_COMPOSE up -d woken_db
+$DOCKER_COMPOSE run wait_dbs
+
+$DOCKER_COMPOSE run woken_db_setup
+
+$DOCKER_COMPOSE up -d
