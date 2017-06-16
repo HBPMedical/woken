@@ -84,7 +84,7 @@ woken_db_setup:
     - FLYWAY_USER=woken
     - FLYWAY_PASSWORD=woken
   links:
-   - "woken_db:db"fi
+   - "woken_db:db"
 
 # Expose the database to the host
 metadb:
