@@ -59,7 +59,7 @@ woken_db:
   container_name: "woken-db"
   net: bridge
   ports:
-    - "65432:5432"
+    - "65434:5432"
   restart: unless-stopped
   environment:
     - POSTGRES_USER=woken
@@ -86,6 +86,17 @@ woken_db_setup:
   links:
    - "woken_db:db"
 
+# Expose the database to the host, including the Docker container running the algorithms
+sciencedb:
+  image: postgres:9.4.5
+  net: bridge
+  ports:
+    - "65432:5432"
+  volumes:
+    - ./sample-datasets-db/sql:/docker-entrypoint-initdb.d/
+  environment:
+    POSTGRES_PASSWORD: test
+
 # Expose the database to the host
 metadb:
   image: postgres:9.4.5
@@ -94,17 +105,6 @@ metadb:
     - "65433:5432"
   volumes:
     - ./sample-datasets-db/meta/sql:/docker-entrypoint-initdb.d/
-  environment:
-    POSTGRES_PASSWORD: test
-
-# Expose the database to the host, including the Docker container running the algorithms
-analyticsdb:
-  image: postgres:9.4.5
-  net: bridge
-  ports:
-    - "65434:5432"
-  volumes:
-    - ./analytics-db/sql:/docker-entrypoint-initdb.d/
   environment:
     POSTGRES_PASSWORD: test
 
