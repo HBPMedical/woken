@@ -74,7 +74,7 @@ wait_dbs:
 
 # Use the latest image built as this is what is under test
 woken_db_setup:
-  image: "hbpmip/woken-db-setup:latest"
+  image: "hbpmip/woken-db-setup:b22cb6c"
   container_name: "woken-db-setup"
   environment:
     - FLYWAY_DBMS=postgresql
@@ -89,6 +89,7 @@ woken_db_setup:
 # Expose the database to the host, including the Docker container running the algorithms
 sciencedb:
   image: postgres:9.4.5
+  container_name: "science_db"
   net: bridge
   ports:
     - "65432:5432"
