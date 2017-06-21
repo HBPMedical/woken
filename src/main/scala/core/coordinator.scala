@@ -148,6 +148,7 @@ trait CoordinatorActor extends Actor with ActorLogging with LoggingFSM[State, St
 class LocalCoordinatorActor(val chronosService: ActorRef, val resultDatabase: JobResultsDAL,
                             val jobResultsFactory: JobResults.Factory) extends CoordinatorActor {
   log.info ("Local coordinator actor started...")
+  log.info ("Local coordinator actor started!!!")
 
   when (WaitForNewJob) {
     case Event(Start(job), data: StateData) => {
@@ -171,6 +172,8 @@ class FederationCoordinatorActor(val chronosService: ActorRef, val resultDatabas
                                  val jobResultsFactory: JobResults.Factory) extends CoordinatorActor {
 
   import CoordinatorActor._
+
+  log.info ("Federation actor spawned")
 
   when (WaitForNewJob) {
     case Event(Start(job), data: StateData) => {
@@ -298,6 +301,9 @@ class ExperimentActor(val chronosService: ActorRef, val resultDatabase: JobResul
 
   import ExperimentActor.{WaitForNewJob, Start, _}
 
+  log.info ("Experiment actor spawned")
+
+
   def reduceAndStop(data: ExperimentActor.Data): State = {
 
     //TODO WP3 Save the results in results DB
@@ -387,6 +393,9 @@ class AlgorithmActor(val chronosService: ActorRef, val resultDatabase: JobResult
                      val jobResultsFactory: JobResults.Factory) extends Actor with ActorLogging with LoggingFSM[State, Option[AlgorithmActor.Data]] {
 
   import AlgorithmActor._
+
+  log.info ("Algorithm actor spawned")
+
 
   def reduceAndStop(data: AlgorithmActor.Data): State = {
 
@@ -513,6 +522,8 @@ class CrossValidationActor(val chronosService: ActorRef, val resultDatabase: Job
   def reduceAndStop(data: CrossValidationActor.Data): State = {
 
     import core.validation.ScoresProtocol._
+
+    log.warning(s"CrossValidator Spawned")
 
     // Aggregation of results from all folds
     val jsonValidation = JsObject(
