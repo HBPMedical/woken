@@ -74,7 +74,7 @@ wait_dbs:
 
 # Use the latest image built as this is what is under test
 woken_db_setup:
-  image: "hbpmip/woken-db-setup:1.0.1"
+  image: "hbpmip/woken-db-setup:b22cb6c"
   container_name: "woken-db-setup"
   environment:
     - FLYWAY_DBMS=postgresql
