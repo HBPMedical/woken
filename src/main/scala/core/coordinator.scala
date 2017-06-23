@@ -326,6 +326,8 @@ class ExperimentActor(val chronosService: ActorRef, val resultDatabase: JobResul
 
       log.warning(s"List of algorithms: ${algorithms.mkString(",")}")
 
+
+
       if (algorithms.nonEmpty) {
 
         // Spawn an AlgorithmActor for every algorithm
@@ -396,7 +398,6 @@ class AlgorithmActor(val chronosService: ActorRef, val resultDatabase: JobResult
 
   log.info ("Algorithm actor spawned")
 
-
   def reduceAndStop(data: AlgorithmActor.Data): State = {
 
     val validations = JsArray(data.results.map({case (key, value) => JsObject("code" -> JsString(key.code), "name" -> JsString(key.name), "data" -> JsonParser(value))}).toVector)
@@ -422,20 +423,34 @@ class AlgorithmActor(val chronosService: ActorRef, val resultDatabase: JobResult
       log.warning(s"List of validations: ${validations.size}")
 
       // Spawn a LocalCoordinatorActor
-      val jobId = UUID.randomUUID().toString
-      val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), parameters, None)
-      val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
-      worker ! CoordinatorActor.Start(subjob)
-
-      // Spawn a CrossValidationActor for every validation
-      for (v <- validations) {
+      if (algorithm.code ==  "tpot")
+      {
+        log.warning("THE GAME STARTS HERE!!!!!!")
         val jobId = UUID.randomUUID().toString
-        val subjob = CrossValidationActor.Job(jobId, job.inputDb, algorithm, v, parameters)
-        val validationWorker = context.actorOf(Props(classOf[CrossValidationActor], chronosService, resultDatabase, federationDatabase, jobResultsFactory))
-        validationWorker ! CrossValidationActor.Start(subjob)
-      }
+        val subjob = InteractiveActor.Job(jobId, Some(defaultDb))
+        val worker = context.actorOf(Props(classOf[InteractiveActor], chronosService, resultDatabase, federationDatabase, RequestProtocol))
+        worker ! InteractiveActor.Start(subjob)
 
-      goto(WaitForWorkers) using Some(Data(job, replyTo, None, collection.mutable.Map(), validations.size))
+        //TODO : Change that to use another way to bypass PFA
+        goto(WaitForWorkers) using Some(Data(job, replyTo, None, collection.mutable.Map(), validations.size))
+      }
+      else
+      {
+        val jobId = UUID.randomUUID().toString
+        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), parameters, None)
+        val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
+        worker ! CoordinatorActor.Start(subjob)
+
+        // Spawn a CrossValidationActor for every validation
+        for (v <- validations) {
+          val jobId = UUID.randomUUID().toString
+          val subjob = CrossValidationActor.Job(jobId, job.inputDb, algorithm, v, parameters)
+          val validationWorker = context.actorOf(Props(classOf[CrossValidationActor], chronosService, resultDatabase, federationDatabase, jobResultsFactory))
+          validationWorker ! CrossValidationActor.Start(subjob)
+        }
+
+        goto(WaitForWorkers) using Some(Data(job, replyTo, None, collection.mutable.Map(), validations.size))
+      }
     }
   }
 
@@ -617,3 +632,74 @@ class CrossValidationActor(val chronosService: ActorRef, val resultDatabase: Job
   initialize()
 }
 
+/**
+  * We use the companion object to hold all the messages that the ``InteractiveActor``
+  * receives.
+  */
+object InteractiveActor {
+
+  // FSM States
+  case object WaitForNewJob extends State
+  case object WaitForWorkers extends State
+
+  // FSM Data
+  case class Data(job: Job, replyTo: ActorRef)
+
+  // Incoming messages
+  case class Job(
+                  jobId: String,                   // Id of the job (should be unique)
+                  inputQuery: Option[String]       // One or 0 SQL query
+                )
+
+  case class Start(job: Job)
+
+  case class trainingResponse(string: String)
+  case class ResultResponse(algorithm: Algorithm, data: String)
+  case class ErrorResponse(algorithm: Algorithm,  message: String)
+}
+
+
+/* Very basic and fixed first version of the interactive workflow, based on the tpot functionnalities. Flexibility to come in the
+  next versions, this one is done for prototyping.
+ */
+class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResultsDAL, val federationDatabase: Option[JobResultsDAL],
+                       val jobResultsFactory: JobResults.Factory) extends Actor with ActorLogging with LoggingFSM[State, Option[InteractiveActor.Data]] {
+
+  import InteractiveActor._
+
+  log.info ("InteractiveActor actor spawned")
+
+
+  startWith(InteractiveActor.WaitForNewJob, None)
+
+  when (InteractiveActor.WaitForNewJob) {
+    case Event(InteractiveActor.Start(job), _) => {
+      val replyTo = sender()
+
+      val parameters = Map(
+        "PARAM_query" -> "select * from linreg_sample;"
+      )
+
+      log.warning("Hello from the training method from the interactive container")
+
+      // TODO: Write the JSON parameters into a file (see the docker image volume configuration)
+
+      val jobId = UUID.randomUUID().toString
+      val subjob = JobDto(jobId, dockerImage("tpot"), None, None, Some(defaultDb), parameters, None)
+      val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
+      worker ! CoordinatorActor.Start(subjob)
+
+      // Can not come back from there as it has no return.
+      goto(WaitForWorkers) using Some(Data(job, replyTo))
+    }
+  }
+
+  when (WaitForWorkers) {
+    case Event(InteractiveActor.trainingResponse, _) => {
+      log.warning("Hello from the testing method from the interactive container")
+      stop()
+    }
+  }
+
+  initialize()
+}
