@@ -20,6 +20,8 @@ Woken requires [Captain](https://github.com/harbur/captain) and [docker-compose]
 
 Follow these steps to get started:
 
+Follow these steps to get started:
+
 1. Git-clone this repository.
 
         $ git clone https://github.com/LREN-CHUV/woken.git
@@ -28,16 +30,20 @@ Follow these steps to get started:
 
         $ cd woken
 
-3. Build the application
+3. Clone submodules
+
+        $ git submodule update --init --recursive
+
+4. Build the application
 
         > ./build.sh
 
-4. Run the application
+5. Run the application
 
         > cd dev-tests
         > ./run.sh
 
-5. Browse to [http://localhost:8087](http://localhost:8087/) or run one of the query* script located in folder 'dev-tests'.
+6. Browse to [http://localhost:8087](http://localhost:8087/) or run one of the query* script located in folder 'dev-tests'.
 
 dev-tests/run.sh uses docker-compose to start a full environment with Mesos, Zookeeper and Chronos, all of those are required for the proper execution of Woken.
 
