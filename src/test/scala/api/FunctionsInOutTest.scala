@@ -27,8 +27,8 @@ object FunctionsInOutTest {
     val jobResult = JobResult("002", "testNode", OffsetDateTime.now(), Some(results), shape = "r_other_intermediate", function = "r-linear-regression")
   }
 }
-
-/*class FunctionsInOutTest extends FlatSpec with Matchers {
+/*
+class FunctionsInOutTest extends FlatSpec with Matchers {
 
   import FunctionsInOut._
   import FunctionsInOutTest._

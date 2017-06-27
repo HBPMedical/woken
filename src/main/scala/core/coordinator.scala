@@ -9,7 +9,7 @@ import akka.actor._
 import api._
 import config.Config.defaultSettings._
 import core.CoordinatorActor.Start
-import core.InteractiveActor.JSONEntry
+import core.InteractiveActor.PortMappingProtocol
 import core.clients.{ChronosService, JobClientService}
 import core.model.{JobResult, JobToChronos}
 import core.validation.{KFoldCrossValidation, Scores, ValidationPoolManager}
@@ -688,13 +688,24 @@ object InteractiveActor {
   case class PortMapping(containerPort: Int, hostPort: Int, servicePort: Int, protocol: String)
 
   // Case class test for input file for the interactive Container
-  case class JSONEntry(type_ :String, values: List[Int], query: String)
+  case class InputDockerJSON(type_ :String, values: List[Int], query: String)
   
   // SPRAY converter for custom case classes
-  object JSONEntryProtocol extends DefaultJsonProtocol {
-    implicit val entryFormat = jsonFormat3(JSONEntry)
+  object InputDockerJSONProtocol extends DefaultJsonProtocol {
+    implicit val inputDockerJSONFormat = jsonFormat3(InputDockerJSON)
   }
 
+  object PortMappingProtocol extends DefaultJsonProtocol {
+    implicit val portMappingFormat = jsonFormat4(PortMapping)
+  }
+
+  object VolumeProtocol extends DefaultJsonProtocol {
+    implicit val volumeFormat = jsonFormat3(Volume)
+  }
+
+//  object VolumesProtocol extends DefaultJsonProtocol {
+//    def volumesFormat = jsonFormat1(Volumes.apply)
+//  }
 }
 
 /* Very basic and fixed first version of the interactive workflow, based on the tpot functionnalities. Flexibility to come in the
@@ -704,7 +715,7 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
                        val jobResultsFactory: JobResults.Factory) extends Actor with ActorLogging with LoggingFSM[State, Option[InteractiveActor.Data]] {
 
   import InteractiveActor._
-  import JSONEntryProtocol._
+  import InputDockerJSONProtocol._
 
   log.info ("InteractiveActor actor spawned")
 
@@ -718,7 +729,7 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
       val values = List[Int](12,13,14,14)
       val type_ = "training"
       val query = "SELECT score_test1 from linreg_sample;"
-      val entry = JSONEntry(type_, values, query).toJson
+      val entry = InputDockerJSON(type_, values, query).toJson
 
       //Creation of the directory tree to write the input data file for the container
       var homeDirectory = System.getenv("HOME")
