@@ -39,6 +39,8 @@ libraryDependencies ++= {
     "com.gettyimages"     %%  "spray-swagger"            % "0.5.0" excludeAll ExclusionRule(organization = "io.spray"),
     "org.webjars"         %   "swagger-ui"               % "2.0.12",
     "org.yaml"            %   "snakeyaml"                % versions.snakeyaml,
+    "org.scalaj"          %% "scalaj-http"               % "2.3.0",
+
     ("org.apache.spark"   %%  "spark-mllib"              % versions.spark).
       exclude("commons-beanutils", "commons-beanutils-core").
       exclude("commons-collections", "commons-collections").

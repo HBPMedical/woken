@@ -1,31 +1,30 @@
 package core
 
+import java.io.{File, PrintWriter}
 import java.time.OffsetDateTime
 import java.util.UUID
-import scala.util.Random
 
 import akka.actor.FSM.Failure
 import akka.actor._
 import api._
-import com.fasterxml.jackson.annotation.JsonValue
 import config.Config.defaultSettings._
 import core.CoordinatorActor.Start
+import core.InteractiveActor.JSONEntry
 import core.clients.{ChronosService, JobClientService}
-import core.model.JobToChronos
-import core.model.JobResult
-import core.validation.KFoldCrossValidation
-import core.validation.ValidationPoolManager
-import core.validation.Scores
-import dao.{JobResultsDAL}
-import models.{ChronosJob, Container, EnvironmentVariable => EV}
+import core.model.{JobResult, JobToChronos}
+import core.validation.{KFoldCrossValidation, Scores, ValidationPoolManager}
+import dao.JobResultsDAL
+import eu.hbp.mip.messages.external.{Algorithm, Validation => ApiValidation}
+import eu.hbp.mip.messages.validation._
+import models.{ChronosJob, EnvironmentVariable => EV}
 import spray.http.StatusCodes
 import spray.httpx.marshalling.ToResponseMarshaller
 import spray.json.{JsString, _}
 
 import scala.concurrent.duration._
+import scala.util.Random
+import scalaj.http._
 
-import eu.hbp.mip.messages.external.{Algorithm, Validation => ApiValidation}
-import eu.hbp.mip.messages.validation._
 
 /**
   * We use the companion object to hold all the messages that the ``CoordinatorActor``
@@ -35,8 +34,8 @@ object CoordinatorActor {
 
   // Incoming messages
   case class Start(job: JobDto) extends RestMessage {
-    import spray.httpx.SprayJsonSupport._
     import DefaultJsonProtocol._
+    import spray.httpx.SprayJsonSupport._
     override def marshaller: ToResponseMarshaller[Start] = ToResponseMarshaller.fromMarshaller(StatusCodes.OK)(jsonFormat1(Start))
   }
 
@@ -53,8 +52,8 @@ object CoordinatorActor {
   val Result = core.model.JobResult
 
   case class ErrorResponse(message: String) extends RestMessage {
-    import spray.httpx.SprayJsonSupport._
     import DefaultJsonProtocol._
+    import spray.httpx.SprayJsonSupport._
     override def marshaller: ToResponseMarshaller[ErrorResponse] = ToResponseMarshaller.fromMarshaller(StatusCodes.InternalServerError)(jsonFormat1(ErrorResponse))
   }
 
@@ -265,8 +264,8 @@ object ExperimentActor {
                 )
 
   case class Start(job: Job) extends RestMessage {
-    import spray.httpx.SprayJsonSupport._
     import ApiJsonSupport._
+    import spray.httpx.SprayJsonSupport._
     implicit val jobFormat = jsonFormat5(Job.apply)
     override def marshaller: ToResponseMarshaller[Start] = ToResponseMarshaller.fromMarshaller(StatusCodes.OK)(jsonFormat1(Start))
   }
@@ -277,8 +276,8 @@ object ExperimentActor {
 
   case class ErrorResponse(message: String) extends RestMessage {
 
-    import spray.httpx.SprayJsonSupport._
     import DefaultJsonProtocol._
+    import spray.httpx.SprayJsonSupport._
 
     override def marshaller: ToResponseMarshaller[ErrorResponse] = ToResponseMarshaller.fromMarshaller(StatusCodes.InternalServerError)(jsonFormat1(ErrorResponse))
   }
@@ -299,7 +298,7 @@ object ExperimentActor {
 class ExperimentActor(val chronosService: ActorRef, val resultDatabase: JobResultsDAL, val federationDatabase: Option[JobResultsDAL],
                       val jobResultsFactory: JobResults.Factory) extends Actor with ActorLogging with LoggingFSM[State, Option[ExperimentActor.Data]] {
 
-  import ExperimentActor.{WaitForNewJob, Start, _}
+  import ExperimentActor.{Start, _}
 
   log.info ("Experiment actor spawned")
 
@@ -653,11 +652,50 @@ object InteractiveActor {
 
   case class Start(job: Job)
 
-  case class trainingResponse(string: String)
+  case class TrainingResponse(string: String)
   case class ResultResponse(algorithm: Algorithm, data: String)
   case class ErrorResponse(algorithm: Algorithm,  message: String)
-}
 
+
+  // case class for object to JSON conversion, for the HTTP request
+
+  /*
+  {
+    "id": "bridged-webapp",
+    "cmd": "python3 -m http.server 8080",
+    "cpus": 0.5,
+    "mem": 64.0,
+    "instances": 2,
+    "container": {
+      "type": "DOCKER",
+      "docker": {
+        "image": "python:3",
+        "network": "BRIDGE",
+        "portMappings": [
+          { "containerPort": 8080, "hostPort": 0, "servicePort": 9000, "protocol": "tcp" },
+          { "containerPort": 161, "hostPort": 0, "protocol": "udp"}
+        ]
+      }
+    },
+  }
+  */
+
+  case class MarathonRequest(id: String, cmd : String, cpus: Double, mem: Double, instances: Int, container:Container) // Main case class for Marathon HTTP request format
+  case class Volume(containerPath: String, hostPath: String, mode:String)
+  case class Volumes(volumes :List[Volume])
+  case class Container(dockerType: String, dockerConfig: DockerConfig)
+  case class DockerConfig(image: String, network:String, portMappings: List[PortMapping])
+  case class PortMapping(containerPort: Int, hostPort: Int, servicePort: Int, protocol: String)
+
+  // Case class test for input file for the interactive Container
+  case class JSONEntry(type_ :String, values: List[Int], query: String)
+  
+  // SPRAY converter for custom case classes
+  object JSONEntryProtocol extends DefaultJsonProtocol {
+    implicit val entryFormat = jsonFormat3(JSONEntry)
+  }
+
+}
 
 /* Very basic and fixed first version of the interactive workflow, based on the tpot functionnalities. Flexibility to come in the
   next versions, this one is done for prototyping.
@@ -666,9 +704,9 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
                        val jobResultsFactory: JobResults.Factory) extends Actor with ActorLogging with LoggingFSM[State, Option[InteractiveActor.Data]] {
 
   import InteractiveActor._
+  import JSONEntryProtocol._
 
   log.info ("InteractiveActor actor spawned")
-
 
   startWith(InteractiveActor.WaitForNewJob, None)
 
@@ -676,26 +714,38 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
     case Event(InteractiveActor.Start(job), _) => {
       val replyTo = sender()
 
-      val parameters = Map(
-        "PARAM_query" -> "select * from linreg_sample;"
-      )
+      // Creation of the spray object, to be converted to JSON
+      val values = List[Int](12,13,14,14)
+      val type_ = "training"
+      val query = "SELECT score_test1 from linreg_sample;"
+      val entry = JSONEntry(type_, values, query).toJson
 
-      log.warning("Hello from the training method from the interactive container")
+      //Creation of the directory tree to write the input data file for the container
+      var homeDirectory = System.getenv("HOME")
+      homeDirectory = homeDirectory.concat("""/.woken/""")
+      val dir = new File(homeDirectory + "training_input.json")
 
-      // TODO: Write the JSON parameters into a file (see the docker image volume configuration)
+      dir.getParentFile.mkdirs()
+      val writer = new PrintWriter(dir)
 
-      val jobId = UUID.randomUUID().toString
-      val subjob = JobDto(jobId, dockerImage("tpot"), None, None, Some(defaultDb), parameters, None)
-      val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
-      worker ! CoordinatorActor.Start(subjob)
+      writer.write(entry.prettyPrint)
+      writer.close()
 
-      // Can not come back from there as it has no return.
+      // Launching the container via Marathon, using HTTP request
+
+      //val response: HttpResponse[String] = Http("http://foo.com/search").param("q","monkeys").asString
+
+      //      val jobId = UUID.randomUUID().toString
+//      val subjob = JobDto(jobId, dockerImage("tpot"), None, None, Some(defaultDb), parameters, None)
+//      val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
+//      worker ! CoordinatorActor.Start(subjob)
+
       goto(WaitForWorkers) using Some(Data(job, replyTo))
     }
   }
 
   when (WaitForWorkers) {
-    case Event(InteractiveActor.trainingResponse, _) => {
+    case Event(InteractiveActor.TrainingResponse, _) => {
       log.warning("Hello from the testing method from the interactive container")
       stop()
     }

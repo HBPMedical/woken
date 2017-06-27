@@ -1,0 +1,5 @@
+{
+"type" : "training",
+"values": [12, 13, 14, 14],
+"query" : "SELECT score_test1 from linreg_sample;
+"}
