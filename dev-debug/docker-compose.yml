@@ -1,118 +1,124 @@
-# Configuration taken from https://github.com/meltwater/docker-mesos
+version: '2'
 
-zookeeper:
-  image: mesoscloud/zookeeper:3.4.6-centos-7
-  net: host
-  ports:
-    - "2181:2181"
-    - "2888:2888"
-    - "3888:3888"
-  environment:
-    SERVERS: 'server.1=127.0.0.1'
-    MYID: '1'
+services:
+  zoo1:
+    image: zookeeper:3.4
+    network_mode: "host"
+    ports:
+       - 2181:2181
+       - 127.0.0.1:2888:2888
+       - 127.0.0.1:3888:3888
 
-mesosmaster:
-  image: mesosphere/mesos-master:0.28.1
-  net: host
-  volumes:
-    - /var/log/mesos/master
-  environment:
-    MESOS_ZK: 'zk://localhost:2181/mesos'
-    MESOS_QUORUM: '1'
-    MESOS_CLUSTER: 'local'
-    MESOS_HOSTNAME: 'localhost'
-    MESOS_LOG_DIR: '/var/log/mesos/master'
+  mesos-master:
+    image: mesosphere/mesos-master:1.3.0
+    network_mode: "host"
+    environment:
+      - MESOS_CLUSTER=docker-compose
+      - MESOS_ZK=zk://127.0.0.1:2181/mesos
+      - MESOS_HOSTNAME=127.0.0.1
+      - MESOS_IP=127.0.0.1
+      - MESOS_QUORUM=1
+      - MESOS_WORK_DIR=/var/lib/mesos
 
-mesosslave:
-  build: mesos-slave
-  net: host
-  privileged: true
-  volumes:
-    - /var/log/mesos/slave
-    - /sys:/sys
-# /cgroup is needed on some older Linux versions
-#    - /cgroup:/cgroup
-# /usr/bin/docker is needed if you're running an older docker version
-#    - /usr/local/bin/docker:/usr/bin/docker:r
-    - /var/run/docker.sock:/var/run/docker.sock:rw
-  environment:
-    MESOS_MASTER: 'zk://localhost:2181/mesos'
-    MESOS_PORT: '5051'
-    MESOS_LOG_DIR: '/var/log/mesos/slave'
-    MESOS_CONTAINERIZERS: 'docker,mesos'
-    MESOS_EXECUTOR_REGISTRATION_TIMEOUT: '5mins'
-    MESOS_EXECUTOR_SHUTDOWN_GRACE_PERIOD: '90secs'
-    MESOS_DOCKER_STOP_TIMEOUT: '60secs'
-# If your workstation doesn't have a resolvable hostname/FQDN then $MESOS_HOSTNAME needs to be set to its IP-address
-    MESOS_HOSTNAME: 127.0.0.1
+  mesos-slave:
+    image: mesosphere/mesos-slave:1.3.0
+    network_mode: "host"
+    privileged: true
+    environment:
+      - MESOS_PORT=5051
+      - MESOS_MASTER=zk://127.0.0.1:2181/mesos
+      - MESOS_HOSTNAME=127.0.0.1
+      - MESOS_IP=127.0.0.1
+      - MESOS_CONTAINERIZERS=docker,mesos
+      - MESOS_WORK_DIR=/var/lib/mesos
+      - MESOS_SWITCH_USER=0
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+      - /usr/bin/docker:/usr/bin/docker.so
+      - /var/run/docker.sock:/var/run/docker.sock
 
-chronos:
-  image: mesosphere/chronos:chronos-2.5.0-0.1.20160223054243.ubuntu1404-mesos-0.27.1-2.0.226.ubuntu1404
-  command: '/usr/bin/chronos run_jar --http_port 4400 --zk_hosts localhost:2181 --master zk://localhost:2181/mesos'
-  net: host
-  ports:
-    - "4400:4400"
+  marathon:
+    image: mesosphere/marathon:v1.4.5
+    network_mode: "host"
+    ports:
+      - "8080:8080"
+    environment:
+      - MARATHON_ZK=zk://127.0.0.1:2181/marathon
+      - MARATHON_MASTER=zk://127.0.0.1:2181/mesos
+      - MARATHON_HOSTNAME=127.0.0.1
+      - LIBPROCESS_IP=127.0.0.1
+    command: "--event_subscriber http_callback"
 
-# Expose the database to the host, including the Docker container running the algorithms
-woken_db:
-  image: "postgres:9.6.2-alpine"
-  container_name: "woken-db"
-  net: bridge
-  ports:
-    - "65434:5432"
-  restart: unless-stopped
-  environment:
-    - POSTGRES_USER=woken
-    - POSTGRES_PASSWORD=woken
 
-wait_dbs:
-  image: "waisbrot/wait"
-  links:
-    - "woken_db:woken_db"
-  environment:
-    - TARGETS=woken_db:5432
+  chronos:
+    image: mesosphere/chronos:chronos-2.5.0-0.1.20160223054243.ubuntu1404-mesos-0.27.1-2.0.226.ubuntu1404
+    command: '/usr/bin/chronos run_jar --http_port 4400 --zk_hosts 127.0.0.1:2181 --master zk://127.0.0.1:2181/mesos'
+    network_mode: "host"
+    ports:
+      - 4400:4400
 
-# Use the latest image built as this is what is under test
-woken_db_setup:
-  image: "hbpmip/woken-db-setup:b22cb6c"
-  container_name: "woken-db-setup"
-  environment:
-    - FLYWAY_DBMS=postgresql
-    - FLYWAY_HOST=db
-    - FLYWAY_PORT=5432
-    - FLYWAY_DATABASE_NAME=woken
-    - FLYWAY_USER=woken
-    - FLYWAY_PASSWORD=woken
-  links:
-   - "woken_db:db"
+  # Expose the database to the host, including the Docker container running the algorithms
+  woken_db:
+    image: "postgres:9.6.2-alpine"
+    container_name: "woken-db"
+    network_mode: "bridge"
+    ports:
+      - 65434:5432
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=woken
+      - POSTGRES_PASSWORD=woken
 
-# Expose the database to the host, including the Docker container running the algorithms
-sciencedb:
-  image: postgres:9.4.5
-  container_name: "science_db"
-  net: bridge
-  ports:
-    - "65432:5432"
-  volumes:
-    - ./sample-datasets-db/sql:/docker-entrypoint-initdb.d/
-  environment:
-    POSTGRES_PASSWORD: test
+  wait_dbs:
+    image: "waisbrot/wait"
+    network_mode: "bridge"
+    links:
+      - "woken_db:woken_db"
+    environment:
+      - TARGETS=woken_db:5432
 
-# Expose the database to the host
-metadb:
-  image: postgres:9.4.5
-  net: bridge
-  ports:
-    - "65433:5432"
-  volumes:
-    - ./sample-datasets-db/meta/sql:/docker-entrypoint-initdb.d/
-  environment:
-    POSTGRES_PASSWORD: test
+  # Use the latest image built as this is what is under test
+  woken_db_setup:
+    image: "hbpmip/woken-db-setup:b22cb6c"
+    container_name: "woken-db-setup"
+    network_mode: "bridge"
+    environment:
+      - FLYWAY_DBMS=postgresql
+      - FLYWAY_HOST=db
+      - FLYWAY_PORT=5432
+      - FLYWAY_DATABASE_NAME=woken
+      - FLYWAY_USER=woken
+      - FLYWAY_PASSWORD=woken
+    links:
+     - "woken_db:db"
 
-woken-validation:
-  image: hbpmip/woken-validation:latest
-  net: host
-  volumes:
-    - ./woken/config/validation/application.conf:/opt/woken-validation/config/application.conf
-  ports:
-    - "8082:8082"
+  # Expose the database to the host, including the Docker container running the algorithms
+  sciencedb:
+    image: postgres:9.4.5
+    container_name: "science_db"
+    network_mode: "bridge"
+    ports:
+      - 65432:5432
+    volumes:
+      - ./sample-datasets-db/sql:/docker-entrypoint-initdb.d/
+    environment:
+      POSTGRES_PASSWORD: test
+
+  # Expose the database to the host
+  metadb:
+    image: postgres:9.4.5
+    network_mode: "bridge"
+    ports:
+      - 65433:5432
+    volumes:
+      - ./sample-datasets-db/meta/sql:/docker-entrypoint-initdb.d/
+    environment:
+      POSTGRES_PASSWORD: test
+
+  woken-validation:
+    image: hbpmip/woken-validation:latest
+    network_mode: "host"
+    volumes:
+      - ./woken/config/validation/application.conf:/opt/woken-validation/config/application.conf
+    ports:
+      - 8082:8082

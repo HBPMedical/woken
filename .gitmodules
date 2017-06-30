@@ -1,12 +1,12 @@
 [submodule "dev-tests/analytics-db"]
 	path = dev-tests/analytics-db
-	url = https://github.com/LREN-CHUV/analytics-db.git
+	url = https://github.com/HBPMedical/analytics-db.git
 [submodule "dev-tests/sample-datasets-db"]
 	path = dev-tests/sample-datasets-db
-	url = https://github.com/LREN-CHUV/sample-datasets-db.git
+	url = https://github.com/HBPMedical/sample-datasets-db.git
 [submodule "dev-debug/analytics-db"]
     path = dev-debug/analytics-db
-    url = https://github.com/LREN-CHUV/analytics-db.git
+    url = https://github.com/HBPMedical/analytics-db.git
 [submodule "dev-debug/sample-datasets-db"]
 	path = dev-debug/sample-datasets-db
 	url = https://github.com/HBPMedical/sample-datasets-db.git
