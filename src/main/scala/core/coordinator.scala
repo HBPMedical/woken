@@ -441,7 +441,7 @@ class AlgorithmActor(val chronosService: ActorRef, val resultDatabase: JobResult
       else
       {
         val jobId = UUID.randomUUID().toString
-        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), List(), parameters, None)
+        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), List(), parameters, None, None)
         val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
         worker ! CoordinatorActor.Start(subjob)
 
@@ -578,7 +578,7 @@ class CrossValidationActor(val chronosService: ActorRef, val resultDatabase: Job
         val jobId = UUID.randomUUID().toString
         // TODO To be removed in WP3
         val parameters = adjust(job.parameters, "PARAM_query")((x: String) => x + " EXCEPT ALL (" + x + s" OFFSET ${s} LIMIT ${n})")
-        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), List(),  parameters, None)
+        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), List(),  parameters, None, None)
         val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, federationDatabase, jobResultsFactory))
         workers(worker) = fold
         worker ! CoordinatorActor.Start(subjob)
@@ -656,40 +656,12 @@ object InteractiveActor {
                   parameters: Map[String, String]
                 )
 
-
-
   case class Start(job: Job)
 
   case class TrainingResponse(string: String)
   case class ResultResponse(algorithm: Algorithm, data: String)
   case class ErrorResponse(algorithm: Algorithm,  message: String)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /* Very basic and fixed first version of the interactive workflow, based on the tpot functionnalities. Flexibility to come in the
@@ -833,7 +805,7 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
       val volume: List[Volume] = List(Volume("/docker-volume/", "/home/user/docker-volume/", "RW"))
 
       val jobId = UUID.randomUUID().toString
-      val subjob = JobDto(jobId, dockerImage("tpot"), None, None, Some(defaultDb), volume, job.parameters, None)
+      val subjob = JobDto(jobId, dockerImage("tpot"), None, None, Some(defaultDb), volume, job.parameters, None, Some("train"))
       val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
       worker ! CoordinatorActor.Start(subjob)
 

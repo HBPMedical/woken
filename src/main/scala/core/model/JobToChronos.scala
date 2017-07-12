@@ -40,7 +40,7 @@ object JobToChronos {
       epsilon = "PT5M",
       name = job.jobNameResolved,
       // TODO: FIX THIS HORRORIFIC LINE!
-      command = if (container.image == "axelroy/python-mip-tpot:0.0.1") "train" else "compute",
+      command = job.command.getOrElse("compute"),
       shell = false,
       runAsUser = "root",
       container = container,

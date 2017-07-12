@@ -45,7 +45,7 @@ object FunctionsInOut {
     val jobId = UUID.randomUUID().toString
     val parameters = standardParameters(query) ++ algoParameters(query.algorithm)
 
-    JobDto(jobId, dockerImage(query.algorithm.code), None, None, Some(defaultDb), List(),parameters, None)
+    JobDto(jobId, dockerImage(query.algorithm.code), None, None, Some(defaultDb), List(),parameters, None, None)
   }
 
   def query2job(query: ExperimentQuery): ExperimentActor.Job = {
