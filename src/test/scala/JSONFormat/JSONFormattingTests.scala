@@ -27,7 +27,7 @@ class JSONFormattingTests extends FlatSpec with Matchers{
 
   )
 
-  val volume: Volume = new Volume("/home/user/docker-volume", "/docker-volume/", "RW")
+  val volume: Volume = new Volume("/docker-volume/", "/home/user/docker-volume", "RW")
   val container: Container = new Container("DOCKER", "axelroy/python-mip-tpot", List(Volume("/docker-volume/", "/home/user/docker-volume/", "RW")), None)
   val job: ChronosJob = new ChronosJob("R1//PT24H", "PT5M", "name", "train", false, "root", container, "0.5", "512", List(), false, "admin@mip.chuv.ch", env)
 
