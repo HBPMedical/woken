@@ -423,7 +423,7 @@ class AlgorithmActor(val chronosService: ActorRef, val resultDatabase: JobResult
       // Spawn a LocalCoordinatorActor
       if (algorithm.code ==  "tpot")
       {
-        val volume: Volume = new Volume("/home/user/docker-volume", "/docker-volume/", "RW")
+        val volume: Volume = new Volume("/opt/woken/docker-volume/", "/docker-volume/", "RW")
         val parameters = Map(
           "PARAM_query" -> s"select data from job_result_nodes;"
         )
@@ -657,10 +657,7 @@ object InteractiveActor {
                 )
 
   case class Start(job: Job)
-
-  case class TrainingResponse(string: String)
-  case class ResultResponse(algorithm: Algorithm, data: String)
-  case class ErrorResponse(algorithm: Algorithm,  message: String)
+  case class TrainingResponse(data: Data)
 }
 
 
@@ -672,13 +669,11 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
 
   import InteractiveActor._
 
-
   startWith(InteractiveActor.WaitForNewJob, None)
 
   when (InteractiveActor.WaitForNewJob) {
     case Event(InteractiveActor.Start(job), _) => {
       val replyTo = sender()
-
 
 //      var homeDirectory = System.getenv("HOME")
 //      log.info(homeDirectory)
@@ -699,91 +694,6 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
 
       // Launching the container via Marathon, using HTTP request
 
-      val data : String =
-        """
-          |{
-          |  "name": "TPOT",
-          |  "command": "train",
-          |  "shell": false,
-          |  "executor": "",
-          |  "executorFlags": "",
-          |  "taskInfoData": "",
-          |  "retries": 2,
-          |  "owner": "",
-          |  "ownerName": "",
-          |  "description": "",
-          |  "cpus": 0.1,
-          |  "disk": 256,
-          |  "mem": 512,
-          |  "disabled": false,
-          |  "softError": false,
-          |  "dataProcessingJobType": false,
-          |  "fetch": [],
-          |  "uris": [],
-          |  "environmentVariables": [
-          |    {
-          |      "name": "IN_JDBC_URL",
-          |      "value": "jdbc:postgresql://172.17.0.1:65432/postgres"
-          |    },
-          |    {
-          |      "name": "IN_JDBC_USER",
-          |      "value": "postgres"
-          |    },
-          |    {
-          |      "name": "IN_JDBC_PASSWORD",
-          |      "value": "test"
-          |    },
-          |    {
-          |      "name": "OUT_JDBC_URL",
-          |      "value": "jdbc:postgresql://172.17.0.1:5432/postgres"
-          |    },
-          |    {
-          |      "name": "OUT_JDBC_URL",
-          |      "value": "jdbc:postgresql://172.17.0.1:5432/postgres"
-          |    },
-          |    {
-          |      "name": "OUT_JDBC_USER",
-          |      "value": "postgres"
-          |    },
-          |    {
-          |      "name": "OUT_JDBC_PASSWORD",
-          |      "value": "test"
-          |    },
-          |    {
-          |      "name": "PARAM_meta",
-          |      "value": "{}"
-          |    }
-          |  ],
-          |  "arguments": [],
-          |  "highPriority": false,
-          |  "runAsUser": "root",
-          |  "concurrent": false,
-          |  "container": {
-          |    "type": "DOCKER",
-          |    "image": "axelroy/python-mip-tpot:0.0.1",
-          |    "network": "BRIDGE",
-          |    "networkName": "TPOT",
-          |    "networkInfos": [],
-          |    "volumes": [
-          |      {
-          |        "hostPath": "/home/user/docker-volume/",
-          |        "containerPath": "/docker-volume/",
-          |        "mode": "RW"
-          |      }
-          |    ],
-          |    "forcePullImage": true,
-          |    "parameters": []
-          |  },
-          |  "constraints": [],
-          |  "schedule": "R/2017-07-06T12:02:00.000Z/PT24H",
-          |  "scheduleTimeZone": ""
-          |}
-          |
-        """.stripMargin
-
-
-//      log.info(data)
-
 //      try {
 //        val MarathonTpotConfigFile = "tpot_config.json"
 //        data = Source.fromFile(homeDirectory +MarathonTpotConfigFile).getLines.mkString
@@ -802,6 +712,7 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
 //      val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
 //      worker ! CoordinatorActor.Start(subjob)
 
+      log.info("Launching the interactive actor")
       val volume: List[Volume] = List(Volume("/docker-volume/", "/home/user/docker-volume/", "RW"))
 
       val jobId = UUID.randomUUID().toString
@@ -814,7 +725,7 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
   }
 
   when (WaitForWorkers) {
-    case Event(InteractiveActor.TrainingResponse, _) => {
+    case Event(_, Some(data: Data)) => {
       log.warning("Hello from the testing method from the interactive container")
       stop()
     }
@@ -823,106 +734,128 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
   initialize()
 }
 
-//
-//
-///**
-//  * The job of this Actor in our application core is to service a request to start a job and wait for the result of the calculation.
-//  *
-//  * This actor will have the responsibility of making two requests and then aggregating them together:
-//  *  - One request to Chronos to start the job
-//  *  - Then a separate request in the database for the results, repeated until enough results are present
-//  */
-//trait CoordinatorActorInteractive extends Actor with ActorLogging with LoggingFSM[State, StateData] {
-//
-//  val repeatDuration = 200.milliseconds
-//
-//  def chronosService: ActorRef
-//  def resultDatabase: JobResultsDAL
-//  def jobResultsFactory: JobResults.Factory
-//
-//  startWith(WaitForNewJob, Uninitialized)
-//
-//  when (WaitForChronos) {
-//    case Event(Ok, data: WaitLocalData) => goto(RequestFinalResult) using data
-//    case Event(e: Error, data: WaitLocalData) =>
-//      val msg: String = e.message
-//      data.replyTo ! Error(msg)
-//      stop(Failure(msg))
-//    case Event(e: Timeout @unchecked, data: WaitLocalData) =>
-//      val msg: String = "Timeout while connecting to Chronos"
-//      data.replyTo ! Error(msg)
-//      stop(Failure(msg))
-//  }
-//
-//  when (RequestFinalResult, stateTimeout = repeatDuration) {
-//    case Event(StateTimeout, data: WaitLocalData) => {
-//      val results = resultDatabase.findJobResults(data.job.jobId)
-//      if (results.nonEmpty) {
-//        data.replyTo ! jobResultsFactory(results)
-//        stop()
-//      } else {
-//        stay() forMax repeatDuration
-//      }
-//    }
-//  }
-//
-//  whenUnhandled {
-//    case Event(e, s) =>
-//      log.warning("Received unhandled request {} in state {}/{}", e, stateName, s)
-//      stay
-//  }
-//
-//
-//  def transitions: TransitionHandler = {
-//
-//    case _ -> WaitForChronos =>
-//      import ChronosService._
-//      val chronosJob: ChronosJob = JobToChronos.enrich(nextStateData.job)
-//      chronosService ! Schedule(chronosJob)
-//
-//  }
-//
-//  onTransition( transitions )
-//
-//}
-//
-///**
-//  * We use the companion object to hold all the messages that the ``CoordinatorActor``
-//  * receives.
-//  */
-//object CoordinatorActorInteractive {
-//
-//  // Incoming messages
-//  case class Start(job: JobDto) extends RestMessage {
-//    import DefaultJsonProtocol._
-//    import spray.httpx.SprayJsonSupport._
-//    override def marshaller: ToResponseMarshaller[Start] = ToResponseMarshaller.fromMarshaller(StatusCodes.OK)(jsonFormat1(Start))
-//  }
-//
-//  type WorkerJobComplete = JobClientService.JobComplete
-//  val WorkerJobComplete = JobClientService.JobComplete
-//  val WorkerJobError = JobClientService.JobError
-//
-//  // Internal messages
-//  private[CoordinatorActorInteractive] object CheckDb
-//
-//  // Responses
-//
-//  type Result = core.model.JobResult
-//  val Result = core.model.JobResult
-//
-//  case class ErrorResponse(message: String) extends RestMessage {
-//    import DefaultJsonProtocol._
-//    import spray.httpx.SprayJsonSupport._
-//    override def marshaller: ToResponseMarshaller[ErrorResponse] = ToResponseMarshaller.fromMarshaller(StatusCodes.InternalServerError)(jsonFormat1(ErrorResponse))
-//  }
-//
-//  import JobResult._
-//  implicit val resultFormat: JsonFormat[Result] = JobResult.jobResultFormat
-//  implicit val errorResponseFormat = jsonFormat1(ErrorResponse.apply)
-//
-//  def props(chronosService: ActorRef, resultDatabase: JobResultsDAL, federationDatabase: Option[JobResultsDAL], jobResultsFactory: JobResults.Factory): Props =
-//    federationDatabase.map(fd => Props(classOf[FederationCoordinatorActor], chronosService, resultDatabase, fd, jobResultsFactory))
-//      .getOrElse(Props(classOf[LocalCoordinatorActor], chronosService, resultDatabase, jobResultsFactory))
-//
-//}
+
+/*
+* We use the companion object to hold all the messages that the ``CoordinatorActor``
+* receives.
+*/
+object CoordinatorActorInteractive {
+
+  // Incoming messages
+  case class Start(job: JobDto) extends RestMessage {
+    import DefaultJsonProtocol._
+    import spray.httpx.SprayJsonSupport._
+    override def marshaller: ToResponseMarshaller[Start] = ToResponseMarshaller.fromMarshaller(StatusCodes.OK)(jsonFormat1(Start))
+  }
+
+  type WorkerJobComplete = JobClientService.JobComplete
+  val WorkerJobComplete = JobClientService.JobComplete
+  val WorkerJobError = JobClientService.JobError
+
+  // Internal messages
+  private[CoordinatorActorInteractive] object CheckDb
+
+  // Responses
+
+  type Result = core.model.JobResult
+  val Result = core.model.JobResult
+
+  case class ErrorResponse(message: String) extends RestMessage {
+    import DefaultJsonProtocol._
+    import spray.httpx.SprayJsonSupport._
+    override def marshaller: ToResponseMarshaller[ErrorResponse] = ToResponseMarshaller.fromMarshaller(StatusCodes.InternalServerError)(jsonFormat1(ErrorResponse))
+  }
+
+  import JobResult._
+  implicit val resultFormat: JsonFormat[Result] = JobResult.jobResultFormat
+  implicit val errorResponseFormat = jsonFormat1(ErrorResponse.apply)
+
+  def props(chronosService: ActorRef, resultDatabase: JobResultsDAL, federationDatabase: Option[JobResultsDAL], jobResultsFactory: JobResults.Factory): Props =
+    federationDatabase.map(fd => Props(classOf[FederationCoordinatorActor], chronosService, resultDatabase, fd, jobResultsFactory))
+      .getOrElse(Props(classOf[LocalCoordinatorActorInteractive], chronosService, resultDatabase, jobResultsFactory))
+
+}
+
+
+/**
+  * The job of this Actor in our application core is to service a request to start a job and wait for the result of the calculation.
+  *
+  * This actor will have the responsibility of making two requests and then aggregating them together:
+  *  - One request to Chronos to start the job
+  *  - Then a separate request in the database for the results, repeated until enough results are present
+  */
+trait CoordinatorActorInteractive extends Actor with ActorLogging with LoggingFSM[State, StateData] {
+
+  val repeatDuration = 200.milliseconds
+
+  def chronosService: ActorRef
+  def resultDatabase: JobResultsDAL
+  def jobResultsFactory: JobResults.Factory
+
+  startWith(WaitForNewJob, Uninitialized)
+
+  when (WaitForChronos) {
+    case Event(Ok, data: WaitLocalData) => goto(RequestFinalResult) using data
+    case Event(e: Error, data: WaitLocalData) =>
+      val msg: String = e.message
+      data.replyTo ! Error(msg)
+      stop(Failure(msg))
+    case Event(e: Timeout @unchecked, data: WaitLocalData) =>
+      val msg: String = "Timeout while connecting to Chronos"
+      data.replyTo ! Error(msg)
+      stop(Failure(msg))
+  }
+
+  when (RequestFinalResult, stateTimeout = repeatDuration) {
+    case Event(StateTimeout, data: WaitLocalData) => {
+      val results = resultDatabase.findJobResults(data.job.jobId)
+      if (results.nonEmpty) {
+        data.replyTo ! jobResultsFactory(results)
+        stop()
+      } else {
+        stay() forMax repeatDuration
+      }
+    }
+  }
+
+  whenUnhandled {
+    case Event(e, s) =>
+      log.warning("Received unhandled request {} in state {}/{}", e, stateName, s)
+      stay
+  }
+
+
+  def transitions: TransitionHandler = {
+
+    case _ -> WaitForChronos =>
+      import ChronosService._
+      val chronosJob: ChronosJob = JobToChronos.enrich(nextStateData.job)
+      chronosService ! Schedule(chronosJob)
+
+  }
+
+  onTransition( transitions )
+
+}
+
+class LocalCoordinatorActorInteractive(val chronosService: ActorRef, val resultDatabase: JobResultsDAL,
+                            val jobResultsFactory: JobResults.Factory) extends CoordinatorActorInteractive {
+  log.info ("Interactive Local coordinator actor started...")
+
+  when (WaitForNewJob) {
+    case Event(Start(job), data: StateData) => {
+      log.info("ON EST LAAAAA!")
+      goto(WaitForChronos) using WaitLocalData(job, sender())
+    }
+
+  }
+
+  when (WaitForNodes) {
+    case _ => stop(Failure("Unexpected state WaitForNodes"))
+  }
+
+  when (RequestIntermediateResults) {
+    case _ => stop(Failure("Unexpected state RequestIntermediateResults"))
+  }
+  initialize()
+}
