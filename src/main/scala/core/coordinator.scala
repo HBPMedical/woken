@@ -1,6 +1,6 @@
 package core
 
-import java.io.{File, PrintWriter}
+import java.io.{File, FileWriter, PrintWriter}
 import java.time.OffsetDateTime
 import java.util.UUID
 
@@ -9,14 +9,13 @@ import akka.actor._
 import api._
 import config.Config.defaultSettings._
 import core.CoordinatorActor.Start
-import core.InteractiveActor.PortMappingProtocol
 import core.clients.{ChronosService, JobClientService}
 import core.model.{JobResult, JobToChronos}
 import core.validation.{KFoldCrossValidation, Scores, ValidationPoolManager}
 import dao.JobResultsDAL
 import eu.hbp.mip.messages.external.{Algorithm, Validation => ApiValidation}
 import eu.hbp.mip.messages.validation._
-import models.{ChronosJob, EnvironmentVariable => EV}
+import models.{ChronosJob, Volume, EnvironmentVariable => EV}
 import spray.http.StatusCodes
 import spray.httpx.marshalling.ToResponseMarshaller
 import spray.json.{JsString, _}
@@ -24,6 +23,7 @@ import spray.json.{JsString, _}
 import scala.concurrent.duration._
 import scala.util.Random
 import scalaj.http._
+import scala.io.Source
 
 
 /**
@@ -147,7 +147,6 @@ trait CoordinatorActor extends Actor with ActorLogging with LoggingFSM[State, St
 class LocalCoordinatorActor(val chronosService: ActorRef, val resultDatabase: JobResultsDAL,
                             val jobResultsFactory: JobResults.Factory) extends CoordinatorActor {
   log.info ("Local coordinator actor started...")
-  log.info ("Local coordinator actor started!!!")
 
   when (WaitForNewJob) {
     case Event(Start(job), data: StateData) => {
@@ -424,9 +423,15 @@ class AlgorithmActor(val chronosService: ActorRef, val resultDatabase: JobResult
       // Spawn a LocalCoordinatorActor
       if (algorithm.code ==  "tpot")
       {
-        log.warning("THE GAME STARTS HERE!!!!!!")
+        val volume: Volume = new Volume("/home/user/docker-volume", "/docker-volume/", "RW")
+        val parameters = Map(
+          "PARAM_query" -> s"select data from job_result_nodes;"
+        )
+
+        val algo: Algorithm = new Algorithm("tpot", "tpot", Map())
+
         val jobId = UUID.randomUUID().toString
-        val subjob = InteractiveActor.Job(jobId, Some(defaultDb))
+        val subjob = InteractiveActor.Job(jobId, Some(defaultDb), algo, Some(volume), parameters)
         val worker = context.actorOf(Props(classOf[InteractiveActor], chronosService, resultDatabase, federationDatabase, RequestProtocol))
         worker ! InteractiveActor.Start(subjob)
 
@@ -436,7 +441,7 @@ class AlgorithmActor(val chronosService: ActorRef, val resultDatabase: JobResult
       else
       {
         val jobId = UUID.randomUUID().toString
-        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), parameters, None)
+        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), List(), parameters, None)
         val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
         worker ! CoordinatorActor.Start(subjob)
 
@@ -537,8 +542,6 @@ class CrossValidationActor(val chronosService: ActorRef, val resultDatabase: Job
 
     import core.validation.ScoresProtocol._
 
-    log.warning(s"CrossValidator Spawned")
-
     // Aggregation of results from all folds
     val jsonValidation = JsObject(
       "type" -> JsString("KFoldCrossValidation"),
@@ -575,7 +578,7 @@ class CrossValidationActor(val chronosService: ActorRef, val resultDatabase: Job
         val jobId = UUID.randomUUID().toString
         // TODO To be removed in WP3
         val parameters = adjust(job.parameters, "PARAM_query")((x: String) => x + " EXCEPT ALL (" + x + s" OFFSET ${s} LIMIT ${n})")
-        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), parameters, None)
+        val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), List(),  parameters, None)
         val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, federationDatabase, jobResultsFactory))
         workers(worker) = fold
         worker ! CoordinatorActor.Start(subjob)
@@ -646,67 +649,48 @@ object InteractiveActor {
 
   // Incoming messages
   case class Job(
-                  jobId: String,                   // Id of the job (should be unique)
-                  inputQuery: Option[String]       // One or 0 SQL query
+                  jobId: String,
+                  inputDb: Option[String],
+                  algorithms: Algorithm,
+                  volumes: Option[Volume],
+                  parameters: Map[String, String]
                 )
+
+
 
   case class Start(job: Job)
 
   case class TrainingResponse(string: String)
   case class ResultResponse(algorithm: Algorithm, data: String)
   case class ErrorResponse(algorithm: Algorithm,  message: String)
-
-
-  // case class for object to JSON conversion, for the HTTP request
-
-  /*
-  {
-    "id": "bridged-webapp",
-    "cmd": "python3 -m http.server 8080",
-    "cpus": 0.5,
-    "mem": 64.0,
-    "instances": 2,
-    "container": {
-      "type": "DOCKER",
-      "docker": {
-        "image": "python:3",
-        "network": "BRIDGE",
-        "portMappings": [
-          { "containerPort": 8080, "hostPort": 0, "servicePort": 9000, "protocol": "tcp" },
-          { "containerPort": 161, "hostPort": 0, "protocol": "udp"}
-        ]
-      }
-    },
-  }
-  */
-
-  case class MarathonRequest(id: String, cmd : String, cpus: Double, mem: Double, instances: Int, container:Container) // Main case class for Marathon HTTP request format
-  case class Volume(containerPath: String, hostPath: String, mode:String)
-  case class Volumes(volumes :List[Volume])
-  case class Container(dockerType: String, dockerConfig: DockerConfig)
-  case class DockerConfig(image: String, network:String, portMappings: List[PortMapping])
-  case class PortMapping(containerPort: Int, hostPort: Int, servicePort: Int, protocol: String)
-
-  // Case class test for input file for the interactive Container
-  case class InputDockerJSON(type_ :String, values: List[Int], query: String)
-  
-  // SPRAY converter for custom case classes
-  object InputDockerJSONProtocol extends DefaultJsonProtocol {
-    implicit val inputDockerJSONFormat = jsonFormat3(InputDockerJSON)
-  }
-
-  object PortMappingProtocol extends DefaultJsonProtocol {
-    implicit val portMappingFormat = jsonFormat4(PortMapping)
-  }
-
-  object VolumeProtocol extends DefaultJsonProtocol {
-    implicit val volumeFormat = jsonFormat3(Volume)
-  }
-
-//  object VolumesProtocol extends DefaultJsonProtocol {
-//    def volumesFormat = jsonFormat1(Volumes.apply)
-//  }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Very basic and fixed first version of the interactive workflow, based on the tpot functionnalities. Flexibility to come in the
   next versions, this one is done for prototyping.
@@ -715,9 +699,7 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
                        val jobResultsFactory: JobResults.Factory) extends Actor with ActorLogging with LoggingFSM[State, Option[InteractiveActor.Data]] {
 
   import InteractiveActor._
-  import InputDockerJSONProtocol._
 
-  log.info ("InteractiveActor actor spawned")
 
   startWith(InteractiveActor.WaitForNewJob, None)
 
@@ -725,31 +707,135 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
     case Event(InteractiveActor.Start(job), _) => {
       val replyTo = sender()
 
-      // Creation of the spray object, to be converted to JSON
-      val values = List[Int](12,13,14,14)
-      val type_ = "training"
-      val query = "SELECT score_test1 from linreg_sample;"
-      val entry = InputDockerJSON(type_, values, query).toJson
 
-      //Creation of the directory tree to write the input data file for the container
-      var homeDirectory = System.getenv("HOME")
-      homeDirectory = homeDirectory.concat("""/.woken/""")
-      val dir = new File(homeDirectory + "training_input.json")
-
-      dir.getParentFile.mkdirs()
-      val writer = new PrintWriter(dir)
-
-      writer.write(entry.prettyPrint)
-      writer.close()
+//      var homeDirectory = System.getenv("HOME")
+//      log.info(homeDirectory)
+//      homeDirectory = homeDirectory.concat("""/.woken/""")
+//
+//      try{
+//        //Creation of the directory tree to write the input data file for the container
+//        val dir = new File(homeDirectory + "training_input.json")
+//
+//        dir.getParentFile.mkdirs()
+//        val writer = new FileWriter(dir)
+//
+//        writer.write(entry.prettyPrint)
+//        writer.close()
+//      } catch {
+//        case e: Exception => println("exception caught: " + e);
+//      }
 
       // Launching the container via Marathon, using HTTP request
 
-      //val response: HttpResponse[String] = Http("http://foo.com/search").param("q","monkeys").asString
+      val data : String =
+        """
+          |{
+          |  "name": "TPOT",
+          |  "command": "train",
+          |  "shell": false,
+          |  "executor": "",
+          |  "executorFlags": "",
+          |  "taskInfoData": "",
+          |  "retries": 2,
+          |  "owner": "",
+          |  "ownerName": "",
+          |  "description": "",
+          |  "cpus": 0.1,
+          |  "disk": 256,
+          |  "mem": 512,
+          |  "disabled": false,
+          |  "softError": false,
+          |  "dataProcessingJobType": false,
+          |  "fetch": [],
+          |  "uris": [],
+          |  "environmentVariables": [
+          |    {
+          |      "name": "IN_JDBC_URL",
+          |      "value": "jdbc:postgresql://172.17.0.1:65432/postgres"
+          |    },
+          |    {
+          |      "name": "IN_JDBC_USER",
+          |      "value": "postgres"
+          |    },
+          |    {
+          |      "name": "IN_JDBC_PASSWORD",
+          |      "value": "test"
+          |    },
+          |    {
+          |      "name": "OUT_JDBC_URL",
+          |      "value": "jdbc:postgresql://172.17.0.1:5432/postgres"
+          |    },
+          |    {
+          |      "name": "OUT_JDBC_URL",
+          |      "value": "jdbc:postgresql://172.17.0.1:5432/postgres"
+          |    },
+          |    {
+          |      "name": "OUT_JDBC_USER",
+          |      "value": "postgres"
+          |    },
+          |    {
+          |      "name": "OUT_JDBC_PASSWORD",
+          |      "value": "test"
+          |    },
+          |    {
+          |      "name": "PARAM_meta",
+          |      "value": "{}"
+          |    }
+          |  ],
+          |  "arguments": [],
+          |  "highPriority": false,
+          |  "runAsUser": "root",
+          |  "concurrent": false,
+          |  "container": {
+          |    "type": "DOCKER",
+          |    "image": "axelroy/python-mip-tpot:0.0.1",
+          |    "network": "BRIDGE",
+          |    "networkName": "TPOT",
+          |    "networkInfos": [],
+          |    "volumes": [
+          |      {
+          |        "hostPath": "/home/user/docker-volume/",
+          |        "containerPath": "/docker-volume/",
+          |        "mode": "RW"
+          |      }
+          |    ],
+          |    "forcePullImage": true,
+          |    "parameters": []
+          |  },
+          |  "constraints": [],
+          |  "schedule": "R/2017-07-06T12:02:00.000Z/PT24H",
+          |  "scheduleTimeZone": ""
+          |}
+          |
+        """.stripMargin
+
+
+//      log.info(data)
+
+//      try {
+//        val MarathonTpotConfigFile = "tpot_config.json"
+//        data = Source.fromFile(homeDirectory +MarathonTpotConfigFile).getLines.mkString
+//      } catch {
+//        case e: Exception => log.error("Error while reading the marathon's JSON for the container.")
+//      }
+
+//      val urlPost = """http://127.0.0.1:4400/v1/scheduler/iso8601"""
+//      val response: HttpResponse[String] = Http(urlPost).postData(data).header("content-type", "application/json").asString
+//      println(response.code + " -- " + response.statusLine + " -- " + response.body)
+
+
 
       //      val jobId = UUID.randomUUID().toString
-//      val subjob = JobDto(jobId, dockerImage("tpot"), None, None, Some(defaultDb), parameters, None)
+//      val subjob = JobDto(jobId, dockerImage(algorithm.code), None, None, Some(defaultDb), None, parameters, None)
 //      val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
 //      worker ! CoordinatorActor.Start(subjob)
+
+      val volume: List[Volume] = List(Volume("/docker-volume/", "/home/user/docker-volume/", "RW"))
+
+      val jobId = UUID.randomUUID().toString
+      val subjob = JobDto(jobId, dockerImage("tpot"), None, None, Some(defaultDb), volume, job.parameters, None)
+      val worker = context.actorOf(CoordinatorActor.props(chronosService, resultDatabase, None, jobResultsFactory))
+      worker ! CoordinatorActor.Start(subjob)
 
       goto(WaitForWorkers) using Some(Data(job, replyTo))
     }
@@ -764,3 +850,107 @@ class InteractiveActor(val chronosService: ActorRef, val resultDatabase: JobResu
 
   initialize()
 }
+
+//
+//
+///**
+//  * The job of this Actor in our application core is to service a request to start a job and wait for the result of the calculation.
+//  *
+//  * This actor will have the responsibility of making two requests and then aggregating them together:
+//  *  - One request to Chronos to start the job
+//  *  - Then a separate request in the database for the results, repeated until enough results are present
+//  */
+//trait CoordinatorActorInteractive extends Actor with ActorLogging with LoggingFSM[State, StateData] {
+//
+//  val repeatDuration = 200.milliseconds
+//
+//  def chronosService: ActorRef
+//  def resultDatabase: JobResultsDAL
+//  def jobResultsFactory: JobResults.Factory
+//
+//  startWith(WaitForNewJob, Uninitialized)
+//
+//  when (WaitForChronos) {
+//    case Event(Ok, data: WaitLocalData) => goto(RequestFinalResult) using data
+//    case Event(e: Error, data: WaitLocalData) =>
+//      val msg: String = e.message
+//      data.replyTo ! Error(msg)
+//      stop(Failure(msg))
+//    case Event(e: Timeout @unchecked, data: WaitLocalData) =>
+//      val msg: String = "Timeout while connecting to Chronos"
+//      data.replyTo ! Error(msg)
+//      stop(Failure(msg))
+//  }
+//
+//  when (RequestFinalResult, stateTimeout = repeatDuration) {
+//    case Event(StateTimeout, data: WaitLocalData) => {
+//      val results = resultDatabase.findJobResults(data.job.jobId)
+//      if (results.nonEmpty) {
+//        data.replyTo ! jobResultsFactory(results)
+//        stop()
+//      } else {
+//        stay() forMax repeatDuration
+//      }
+//    }
+//  }
+//
+//  whenUnhandled {
+//    case Event(e, s) =>
+//      log.warning("Received unhandled request {} in state {}/{}", e, stateName, s)
+//      stay
+//  }
+//
+//
+//  def transitions: TransitionHandler = {
+//
+//    case _ -> WaitForChronos =>
+//      import ChronosService._
+//      val chronosJob: ChronosJob = JobToChronos.enrich(nextStateData.job)
+//      chronosService ! Schedule(chronosJob)
+//
+//  }
+//
+//  onTransition( transitions )
+//
+//}
+//
+///**
+//  * We use the companion object to hold all the messages that the ``CoordinatorActor``
+//  * receives.
+//  */
+//object CoordinatorActorInteractive {
+//
+//  // Incoming messages
+//  case class Start(job: JobDto) extends RestMessage {
+//    import DefaultJsonProtocol._
+//    import spray.httpx.SprayJsonSupport._
+//    override def marshaller: ToResponseMarshaller[Start] = ToResponseMarshaller.fromMarshaller(StatusCodes.OK)(jsonFormat1(Start))
+//  }
+//
+//  type WorkerJobComplete = JobClientService.JobComplete
+//  val WorkerJobComplete = JobClientService.JobComplete
+//  val WorkerJobError = JobClientService.JobError
+//
+//  // Internal messages
+//  private[CoordinatorActorInteractive] object CheckDb
+//
+//  // Responses
+//
+//  type Result = core.model.JobResult
+//  val Result = core.model.JobResult
+//
+//  case class ErrorResponse(message: String) extends RestMessage {
+//    import DefaultJsonProtocol._
+//    import spray.httpx.SprayJsonSupport._
+//    override def marshaller: ToResponseMarshaller[ErrorResponse] = ToResponseMarshaller.fromMarshaller(StatusCodes.InternalServerError)(jsonFormat1(ErrorResponse))
+//  }
+//
+//  import JobResult._
+//  implicit val resultFormat: JsonFormat[Result] = JobResult.jobResultFormat
+//  implicit val errorResponseFormat = jsonFormat1(ErrorResponse.apply)
+//
+//  def props(chronosService: ActorRef, resultDatabase: JobResultsDAL, federationDatabase: Option[JobResultsDAL], jobResultsFactory: JobResults.Factory): Props =
+//    federationDatabase.map(fd => Props(classOf[FederationCoordinatorActor], chronosService, resultDatabase, fd, jobResultsFactory))
+//      .getOrElse(Props(classOf[LocalCoordinatorActor], chronosService, resultDatabase, jobResultsFactory))
+//
+//}
