@@ -108,8 +108,8 @@ services:
 
   woken-validation:
     image: hbpmip/woken-validation:latest
-    network_mode: "host"
     volumes:
       - ./woken/config/validation/application.conf:/opt/woken-validation/config/application.conf
+      - ./woken-validation/lib:/opt/woken-validation/lib
     ports:
       - 8082:8082

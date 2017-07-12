@@ -22,7 +22,7 @@ object JobToChronos {
 
   def enrich(job: JobDto): ChronosJob = {
 
-    val container = Container("DOCKER", job.dockerImage)
+    val container = Container("DOCKER", job.dockerImage, job.volumes)
     // On Federation, use the federationDb, otherwise look for the input db in the task or in the configuration of the node
     val inputDb = jobs.federationDb orElse job.inputDb orElse jobs.ldsmDb getOrElse (throw new IllegalArgumentException("federationDb or ldsmDb should be defined in the configuration"))
     val outputDb = jobs.resultDb
@@ -39,7 +39,8 @@ object JobToChronos {
       schedule = "R1//PT24H",
       epsilon = "PT5M",
       name = job.jobNameResolved,
-      command = "compute",
+      // TODO: FIX THIS HORRORIFIC LINE!
+      command = if (container.image == "axelroy/python-mip-tpot:0.0.1") "train" else "compute",
       shell = false,
       runAsUser = "root",
       container = container,

@@ -1,6 +1,7 @@
 package api
 
 import com.wordnik.swagger.annotations.{ApiModel, ApiModelProperty}
+import models.Volume
 import spray.json.DefaultJsonProtocol
 
 import scala.annotation.meta.field
@@ -22,6 +23,9 @@ case class JobDto(
   @(ApiModelProperty @field)(value = "name of the input database")
   inputDb: Option[String],
 
+  @(ApiModelProperty @field)(required = false, value = "potential volume for the container")
+  volumes: List[Volume],
+
   @(ApiModelProperty @field)(required = true, value = "additional parameters")
   parameters: Map[String, String],
 
@@ -34,5 +38,5 @@ case class JobDto(
 }
 
 object JobDto extends DefaultJsonProtocol {
-  implicit val jobDtoFormat = jsonFormat7(JobDto.apply)
+  implicit val jobDtoFormat = jsonFormat8(JobDto.apply)
 }
