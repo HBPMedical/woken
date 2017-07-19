@@ -139,7 +139,7 @@ services:
       - woken-bridge
     extra_hosts:
      - "woken:${HOST}"
-    image: hbpmip/woken-validation:latest
+    image: hbpmip/woken-validation:AutoML
     volumes:
       - ./woken/config/validation/application.conf:/opt/woken-validation/config/application.conf
       - ./woken-validation/lib:/opt/woken-validation/lib
