@@ -34,16 +34,32 @@ Follow these steps to get started:
 
         $ git submodule update --init --recursive
 
-4. Build the application
+4. Create and add the interfaces routes to the host filters
+
+        $ docker network create woken-bridge
+        $ docker network inspect woken-bridge | grep 'Gateway' | cut -d: -f2 | awk '{ print $1}' | tr -d '"'
+
+        paste the IP address
+
+        $ sudo nano /etc/hosts
+
+        and add
+
+        xxx.xxx.xxx.xxx      woken
+1       xxx.xxx.xxx.xxx      woken-validation
+
+        where xxx.xxx.xxx.xxx is your the ip address of the woken-bridge interface
+
+5. Build the application
 
         > ./build.sh
 
-5. Run the application
+6. Run the application
 
         > cd dev-tests
         > ./run.sh
 
-6. Browse to [http://localhost:8087](http://localhost:8087/) or run one of the query* script located in folder 'dev-tests'.
+7. Browse to [http://localhost:8087](http://localhost:8087/) or run one of the query* script located in folder 'dev-tests'.
 
 dev-tests/run.sh uses docker-compose to start a full environment with Mesos, Zookeeper and Chronos, all of those are required for the proper execution of Woken.
 
