@@ -39,7 +39,6 @@ object JobToChronos {
       schedule = "R1//PT24H",
       epsilon = "PT5M",
       name = job.jobNameResolved,
-      // TODO: FIX THIS HORRORIFIC LINE!
       command = job.command.getOrElse("compute"),
       shell = false,
       runAsUser = "root",

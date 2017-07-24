@@ -31,10 +31,10 @@ class JSONFormattingTests extends FlatSpec with Matchers{
   val container: Container = new Container("DOCKER", "axelroy/python-mip-tpot", List(Volume("/docker-volume/", "/home/user/docker-volume/", "RW")), None)
   val job: ChronosJob = new ChronosJob("R1//PT24H", "PT5M", "name", "train", false, "root", container, "0.5", "512", List(), false, "admin@mip.chuv.ch", env)
 
-//  print(job)
-//  print(volume.toJson.prettyPrint)
-//  print(container.toJson.prettyPrint)
-  print(job.toJson.prettyPrint.trim)
+
+  job.toJson.compactPrint.trim should be ("""{"name":"name","shell":false,"environmentVariables":[{"name":"IN_JDBC_URL","value":"jdbc:postgresql://172.17.0.1:65432/postgres"},{"name":"IN_JDBC_USER","value":"postgres"},{"name":"IN_JDBC_PASSWORD","value":"test"},{"name":"OUT_JDBC_URL","value":"jdbc:postgresql://172.17.0.1:5432/postgres"},{"name":"OUT_JDBC_USER","value":"postgres"},{"name":"OUT_JDBC_PASSWORD","value":"test"},{"name":"PARAM_meta","value":"{}"}],"container":{"type":"DOCKER","image":"axelroy/python-mip-tpot","volumes":[{"containerPath":"/docker-volume/","hostPath":"/home/user/docker-volume/","mode":"RW"}]},"epsilon":"PT5M","command":"train","uris":[],"async":false,"mem":"512","schedule":"R1//PT24H","cpus":"0.5","owner":"admin@mip.chuv.ch","runAsUser":"root"}""")
+
+//print(job.toJson.compactPrint.trim)
 
 //  val values = List[Int](12,13,14,14)
 //  val type_ = "training"
