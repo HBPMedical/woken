@@ -31,14 +31,25 @@ fi
 echo "Starting the Mesos environment and the woken application..."
 
 if groups $USER | grep &>/dev/null '\bdocker\b'; then
+  DOCKER="docker"
   DOCKER_COMPOSE="docker-compose"
 else
+  DOCKER="sudo docker"
   DOCKER_COMPOSE="sudo docker-compose"
 fi
 
 trap '$DOCKER_COMPOSE rm -f' SIGINT SIGQUIT
 
-export HOST="localhost"
+if [ $($DOCKER network ls | grep -c 'woken-bridge') -lt 1 ]; then
+  echo "Create woken-bridge network..."
+  $DOCKER network create woken-bridge
+else
+  echo "Found woken-bridge network !"
+fi
+
+export HOST=`docker network inspect woken-bridge | grep 'Gateway' | cut -d: -f2 | awk '{ print $1}' | tr -d '"'`
+
+echo "Docker host: $HOST"
 
 echo "Deploy a Postgres instance and wait for it to be ready..."
 $DOCKER_COMPOSE up -d woken_db
