@@ -105,10 +105,6 @@ dev-tests/run.sh uses docker-compose to start a full environment with Mesos, Zoo
 
         Launch the IntelliJ woken with "Run".
 
-
-
-
-
 ## Available Docker containers
 
 The Docker containers that can be executed on this platform require a few specific features.
