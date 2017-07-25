@@ -50,6 +50,10 @@ Follow these steps to get started:
 
         where xxx.xxx.xxx.xxx is your the ip address of the woken-bridge interface
 
+        > nano ~/.bashrc
+
+        add the line export HOST=xxx.xxx.xxx.xxx
+
 ## To use the test environment
 
 5. Build the application
@@ -80,12 +84,29 @@ dev-tests/run.sh uses docker-compose to start a full environment with Mesos, Zoo
 
         configure the run configurations by the menu "Run->Edit configurations" then add "add->new application"
 
-        Set the main class as Web.web
+        Set the main class as web.Web
         Set the VM options : "-Dconfig.file=pathtowoken/dev-debug/woken/config/application.conf"
         Set the "Use classpath of module" to "Woken"
 
         Change the branch to AutoML
         > git checkout AutoML
+        > git submodule update --init --recursive
+
+        > cd dev-debug
+
+        launch the `./run.sh`.
+
+        If the image hbmip/woken-db-setup:b22cb6c doesn't pull:
+        > git clone https://github.com/HBPMedical/woken-db-setup
+        > cd woken-db-setup
+        > ./build.sh
+
+        if captain command not found, follow the installation instructions as shown here : https://github.com/harbur/captain
+
+        Launch the IntelliJ woken with "Run".
+
+
+
 
 
 ## Available Docker containers
