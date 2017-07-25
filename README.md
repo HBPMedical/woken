@@ -46,7 +46,7 @@ Follow these steps to get started:
         and add
 
         xxx.xxx.xxx.xxx      woken
-1       xxx.xxx.xxx.xxx      woken-validation
+        xxx.xxx.xxx.xxx      woken-validation
 
         where xxx.xxx.xxx.xxx is your the ip address of the woken-bridge interface
 
