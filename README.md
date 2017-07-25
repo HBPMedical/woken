@@ -50,6 +50,8 @@ Follow these steps to get started:
 
         where xxx.xxx.xxx.xxx is your the ip address of the woken-bridge interface
 
+## To use the test environment
+
 5. Build the application
 
         > ./build.sh
@@ -62,6 +64,29 @@ Follow these steps to get started:
 7. Browse to [http://localhost:8087](http://localhost:8087/) or run one of the query* script located in folder 'dev-tests'.
 
 dev-tests/run.sh uses docker-compose to start a full environment with Mesos, Zookeeper and Chronos, all of those are required for the proper execution of Woken.
+
+## To use the development environment
+
+5. You must launch and configure IntelliJ for native use
+
+        > idea
+
+        Open project->find the woken root you cloned->OK
+
+        if you don't have the Java 8 SDK and JRE available, install it for your distribution.
+
+        Configure the JDK "import project from sbt" by specifying the `/usr/lib/jvm/java-8-openjdk` directory.
+        Then import, sbt will load the dependencies (this might take a while).
+
+        configure the run configurations by the menu "Run->Edit configurations" then add "add->new application"
+
+        Set the main class as Web.web
+        Set the VM options : "-Dconfig.file=pathtowoken/dev-debug/woken/config/application.conf"
+        Set the "Use classpath of module" to "Woken"
+
+        Change the branch to AutoML
+        > git checkout AutoML
+
 
 ## Available Docker containers
 
